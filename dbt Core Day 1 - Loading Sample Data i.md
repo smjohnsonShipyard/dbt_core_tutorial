@@ -65,19 +65,28 @@ You should be able to see the two tables you created under the **538_football** 
 
 
 <TabItem value="snowflake">
-### Creating demo database
-1. On the top left corner of your Snowflake screen, click on the **Databases** logo. 
+1. In a snowflake worksheet, input the follow query: 
 
-![](undefined/docs/.gitbook/assets/shipyard_2022_05_17_10_12_43.png)
+```
+USE ROLE accountadmin;
+-- dbt roles
+CREATE OR REPLACE ROLE dbt_dev_role;
+CREATE OR REPLACE USER dbt_user PASSWORD = "sailboats";
+GRANT ROLE dbt_dev_role,dbt_prod_role TO USER dbt_user;
+GRANT ROLE dbt_dev_role,dbt_prod_role TO ROLE accountadmin;
+CREATE OR REPLACE WAREHOUSE dbt_dev_wh  WITH WAREHOUSE_SIZE = 'XSMALL' AUTO_SUSPEND = 60 AUTO_RESUME = TRUE MIN_CLUSTER_COUNT = 1 MAX_CLUSTER_COUNT = 1 INITIALLY_SUSPENDED = TRUE;
+GRANT ALL ON WAREHOUSE dbt_dev_wh  TO ROLE dbt_dev_role;
+CREATE OR REPLACE DATABASE dbt_hol_dev; 
+GRANT ALL ON DATABASE dbt_hol_dev  TO ROLE dbt_dev_role;
+GRANT ALL ON ALL SCHEMAS IN DATABASE dbt_hol_dev   TO ROLE dbt_dev_role
+```
+This query creates an example user, warehouse, and database to use throughout the tutorial. 
+2. Run the queries.
+3. Click the **Databases** button on the top left of your screen. You should see the DBT_HOL_DEV database that we created:
 
-2. Click **Create** on the databases screen to create our demo database.
-3. Under **name**, enter dbt_demo. Click Finish
+![](docs/.gitbook/assets/shipyard_2022_05_20_14_47_37.png)
 
-![](undefined/docs/.gitbook/assets/shipyard_2022_05_17_10_15_36.png)
-
-4. You should see the dbt_demo database listed. Click on it to navigate into the database.
-
-![](undefined/docs/.gitbook/assets/Snowflake_to_demo_db.gif
+4. Click **DBT_HOL_DEV** to navigate inside of the database. 
 
 ### Load Data
 1. Click **Create** on the top left of the screen to create a table inside our database.
@@ -87,6 +96,7 @@ You should be able to see the two tables you created under the **538_football** 
 5. Under the **Type** column, select integer. We will need to follow this process for the remaining six columns. The information for those are as follows: 
 | Name | Type |
 |-|-|
+| rank | Integer |
 | prev_rank | Integer |
 | name | String |
 | league | String |
@@ -102,7 +112,20 @@ Your final table setup should look like this:
 
 ![](docs/.gitbook/assets/shipyard_2022_05_17_11_46_51.png)
 
-7. We will need to repeat the steps above for our second table with the following settings:
+7. Click **Load Data** which will bring up the load data menu.
+8. Choose **DBT_DEV_WH** as the warehouse to load data. Click next
+9. Click **Select Files** and select `spi_global_rankings.csv`. Click next.
+10. Click the plus sign next to the drop down to create our file format.
+11. Under name, enter **dbt_tutorial_csv**.
+12. Change header lines to skip to 1 from 0.
+13. Keep the other settings at their default
+14. Click **Finish**.
+15. Click **Load**.
+16. After the data has loaded into Snowflake, you will receive a success message that looks like this:
+
+![](docs/.gitbook/assets/shipyard_2022_05_20_15_04_46.png)
+
+17. We will need to repeat the steps above for our second table with the following settings:
    1. **Table Name**: stg_football_matches
    2. **Schema**: 
 | Name | Type |
@@ -131,9 +154,14 @@ Your final table setup should look like this:
 | adj_score1 | Float |
 | adj_score2 | Float |
 
-You should be able to see both tables listed under your dbt_demo database now
+    3. File selected to load data from: `spi_matches_latest.csv`.
 
-![](docs/.gitbook/assets/shipyard_2022_05_17_14_15_18.png)
+You should be able to see both tables listed under your DBT_HOL_DEV database now
+
+![](docs/.gitbook/assets/shipyard_2022_05_20_15_12_16.png)
+
+18. Click on `STG_FOOTBALL_RANKINGS` and click **Grant Privileges** on the right of the screen. Grant all actions to the DBT_DEV_ROLE.
+19. Repeat this for `STG_FOOTBALL_MATCHES`
 
 
 
@@ -171,3 +199,106 @@ This tutorial is completed using Databrick's Community Edition
 15. After repeating those steps with the indicated changes, your resulting page should look like this:
 
 ![](docs/.gitbook/assets/shipyard_2022_05_19_11_31_39.png)
+
+<TabItem value="redshift">
+
+:::note
+This tutorial assumes that you have appropriate permissions setup along with a cluster created. Also, an S3 bucket to store the sample files will need to be created.
+:::
+
+### Load data into S3
+
+1. From your AWS console, navigate to your S3 buckets.
+2. Navigate into the bucket you created for this tutorial by clicking on its name.
+3. Create a folder inside of your bucket named fivethirtyeight_football by clicking the **Create Folder** button.
+4. Once the folder is created, navigate inside of it.
+5. Click the **Upload** button to begin the process of uploading our sample files.
+6. Click **Add Files**.
+7. Select the two files from your file system and click open. After you do that, your page should look like this: 
+
+![](docs/.gitbook/assets/shipyard_2022_05_23_16_19_24.png)
+
+8. Click **Upload**. After the upload is complete, you should be shown an upload succeeded banner that looks like this: 
+   
+![](docs/.gitbook/assets/shipyard_2022_05_23_16_24_11.png)
+
+### Create Tables in Redshift
+
+1. Navigate into Redshift
+2. Create new schema for our sample data named `soccer` by running this query: 
+
+```sql
+create schema if not exists soccer
+```
+3. Create the tables inside of our new soccer schema to hold our uploaded data in S3. This query will accomplish that: 
+
+```sql 
+create table soccer.stg_football_rankings(
+  rank integer,
+  prev_rank integer,
+  name varchar(255),
+  league varchar(255),
+  offense float,
+  def float,
+  spi float
+);
+
+create table soccer.stg_football_matches(
+  season integer,
+  date date,
+  league_id integer,
+  league varchar(255),
+  team1 varchar(255),
+  team2 varchar(255),
+  spi1 float,
+  spi2 float,
+  prob1 float,
+  prob2 float, 
+  probtie float,
+  proj_score1 float,
+  proj_score2 float,
+  importance1 float,
+  importance2 float,
+  score1 integer,
+  score2 integer,
+  xg1 float,
+  xg2 float,
+  nsxg1 float,
+  nsxg2 float,
+  adj_score1 float,
+  adj_score2 float
+);
+```
+
+Now that we have our tables setup in Redshift. We need to load the data from S3 into the tables.
+### Load data from S3 into Redshift Tables
+
+1. Navigate to S3 and find the files that we uploaded in the prior steps. 
+2. Click the name of each table to locate the S3 URI.
+3. Copy and paste the S3 URIs to a notepad for use later in these steps.
+
+![](docs/.gitbook/assets/shipyard_2022_05_24_10_22_12.png)
+
+4. Navigate back to the Redshift console.
+5. Run the following two queries replacing the italicized lines with the S3 URI, IAM_role, and your region:
+
+```sql
+copy soccer.stg_football_matches( season, date, league_id, league, team1, team2, spi1, spi2, prob1, prob2, probtie, proj_score1, proj_score2, importance1, importance2, score1, score2, xg1, xg2, nsxg1, nsxg2, adj_score1, adj_score2)
+from 'S3 URI'
+iam_role ''arn:aws:iam::XXXXXXXXXX:role/RoleName''
+region 'us-east-1'
+delimiter ','
+ignoreheader 1
+acceptinvchars;
+```
+
+```sql
+copy soccer.stg_football_rankings( rank, prev_rank, name, league, offense, def, spi)
+from 'S3 URI'
+iam_role 'arn:aws:iam::XXXXXXXXXX:role/RoleName'
+region 'us-east-1'
+delimiter ','
+ignoreheader 1
+acceptinvchars;
+```
+You should now be able to query soccer.stg_football_rankings and soccer.stg_football_matches. Feel free to run a query to make sure that the data transfer worked correctly.
